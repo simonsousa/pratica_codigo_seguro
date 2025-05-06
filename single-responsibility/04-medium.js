@@ -4,19 +4,60 @@
  * cada uma com responsabilidade única.
  */
 
-async function processarPagamento(dadosPagamento) {
   // Validação
+  function validarValor(dadosPagamento) {
   if (!dadosPagamento.valor || dadosPagamento.valor <= 0) {
-    return { sucesso: false, mensagem: "Valor inválido" };
+      return { sucesso: false, mensagem: "Valor inválido" };
+    } 
+    return { sucesso: true, mensagem: ""};
   }
 
-  if (
-    !dadosPagamento.cartao ||
-    !dadosPagamento.cartao.numero ||
-    !dadosPagamento.cartao.cvv
-  ) {
-    return { sucesso: false, mensagem: "Dados do cartão inválidos" };
+  function validarCartao(dadosPagamento){
+    if (
+      !dadosPagamento.cartao ||
+      !dadosPagamento.cartao.numero ||
+      !dadosPagamento.cartao.cvv
+    ) {
+      return { sucesso: false, mensagem: "Dados do cartão inválidos" };
+    }
+    return { sucesso: true, mensagem: ""};
   }
+
+async function processarNoGateway(dadosPagamento, numeroCartao) {
+    // Processamento na gateway
+    try {
+      const resposta = await fetch("https://api.pagamento.com/processar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          valor: valorTotal,
+          cartao: {
+            numero: numeroCartaoFormatado,
+            cvv: dadosPagamento.cartao.cvv,
+            validade: dadosPagamento.cartao.validade,
+          },
+        }),
+      });
+
+      const resultado = await resposta.json()
+      return resultado;
+    } catch (error) {
+      return undefined;
+    }
+}
+
+async function processarPagamento(dadosPagamento) {
+  const validacaoValor = validarValor(dadosPagamento);
+  if(!validacaoValor.sucesso){
+    return validacaoValor;
+  }
+
+  const validacaoCartao = validarCartao(dadosPagamento)
+  if(!validacaoCartao.sucesso) {
+    return validacaoCartao;
+  }
+
+  return { sucesso: true, mensagem: ""} 
 
   // Formatação do cartão
   const numeroCartaoFormatado = dadosPagamento.cartao.numero.replace(
@@ -38,22 +79,12 @@ async function processarPagamento(dadosPagamento) {
 
   const valorTotal = dadosPagamento.valor + taxa;
 
-  // Processamento na gateway
-  try {
-    const resposta = await fetch("https://api.pagamento.com/processar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        valor: valorTotal,
-        cartao: {
-          numero: numeroCartaoFormatado,
-          cvv: dadosPagamento.cartao.cvv,
-          validade: dadosPagamento.cartao.validade,
-        },
-      }),
-    });
 
-    const resultado = await resposta.json();
+
+    const resultado = await processarNoGateway(dadosPagamento, numeroCartaoFormatado);
+    if(!resultado){
+      return { sucesso: false, mensagem: "Erro ao processar a compra"}
+    }
 
     // Registro do pagamento
     console.log(
